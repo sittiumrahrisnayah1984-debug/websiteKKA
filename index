@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kuis Tenses Interaktif</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configure Tailwind for custom colors and Inter font -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#1D4ED8', // Blue-700
+                        'secondary': '#3B82F6', // Blue-500
+                        'accent': '#10B981', // Emerald-500 for success
+                        'background': '#F9FAFB', // Light gray background
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <!-- Import Inter font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #EBF8FF; /* Light blue background for fresh look */
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .card {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+        .quiz-button {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        .quiz-button:hover {
+            transform: translateY(-1px);
+        }
+        .option-item {
+            cursor: pointer;
+            border: 2px solid #D1D5DB; /* Gray-300 */
+            transition: all 0.2s;
+        }
+        .option-item:hover:not(.selected) {
+            border-color: #9CA3AF; /* Gray-400 */
+            background-color: #F3F4F6; /* Gray-50 */
+        }
+        .option-item.selected {
+            border-color: #1D4ED8; /* Primary */
+            background-color: #DBEAFE; /* Blue-100 */
+            color: #1D4ED8;
+            font-weight: 600;
+        }
+        /* Custom alert/modal styling */
+        #feedback-modal {
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        .fade-in-down {
+            animation: fadeInDown 0.3s ease-out;
+        }
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Main Application Container -->
+    <div id="app" class="w-full max-w-lg bg-white rounded-xl shadow-2xl overflow-hidden card">
+        <header class="bg-primary p-4 text-white text-center rounded-t-xl">
+            <h1 class="text-2xl font-bold">🚀 Penjelajah Waktu Tenses</h1>
+            <p class="text-sm opacity-90">Kuis Interaktif Bahasa Inggris (Kelas X SMA)</p>
+        </header>
+
+        <main class="p-6">
+            <!-- State 1: Start Screen -->
+            <div id="start-screen" class="space-y-6">
+                <h2 class="text-xl font-semibold text-gray-800">Selamat Datang!</h2>
+                <p class="text-gray-600">Jawablah pertanyaan-pertanyaan tentang Tenses untuk mendapatkan skor tertinggi. Masukkan nama Anda untuk memulai petualangan ini!</p>
+
+                <label for="student-name" class="block text-sm font-medium text-gray-700">Nama Siswa:</label>
+                <input type="text" id="student-name" placeholder="Contoh: Budi Santoso"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-secondary focus:border-secondary outline-none">
+
+                <button id="start-button" onclick="startQuiz()"
+                        class="w-full bg-accent text-white quiz-button hover:bg-emerald-600">
+                    Mulai Kuis
+                </button>
+                <p id="name-error" class="text-red-500 text-sm hidden">Nama tidak boleh kosong.</p>
+            </div>
+
+            <!-- State 2: Quiz Screen -->
+            <div id="quiz-screen" class="hidden space-y-6">
+                <!-- Status Bar: Name, Question Index, Score -->
+                <div class="flex justify-between items-center text-sm font-medium text-gray-600 border-b pb-3 mb-4">
+                    <span id="student-display" class="text-primary font-bold"></span>
+                    <span id="question-status">Soal: 1 / 5</span>
+                    <span id="score-display">Skor: 0</span>
+                </div>
+
+                <!-- Question Area -->
+                <div class="bg-gray-50 p-4 rounded-lg border-l-4 border-primary">
+                    <p class="text-lg font-semibold text-gray-800 mb-2">Soal <span id="current-q-index">1</span>:</p>
+                    <p id="question-text" class="text-xl font-medium text-gray-900"></p>
+                </div>
+
+                <!-- Options Area -->
+                <div id="options-container" class="space-y-3">
+                    <!-- Options will be dynamically injected here -->
+                </div>
+
+                <!-- Navigation Button -->
+                <button id="next-button" onclick="nextQuestion()" disabled
+                        class="w-full bg-primary text-white quiz-button opacity-50 cursor-not-allowed hover:bg-blue-800">
+                    Selanjutnya
+                </button>
+
+                <!-- Feedback Area (Hidden initially) -->
+                <div id="feedback-area" class="text-center font-semibold text-lg p-2 rounded-lg hidden"></div>
+            </div>
+
+            <!-- State 3: Result Screen -->
+            <div id="result-screen" class="hidden text-center space-y-6">
+                <h2 class="text-2xl font-bold text-primary">🎉 Hasil Kuis Selesai!</h2>
+                <div class="p-6 bg-yellow-50 rounded-lg space-y-3">
+                    <p class="text-xl text-gray-700">Terima kasih telah berpartisipasi,</p>
+                    <p id="result-name" class="text-3xl font-extrabold text-primary"></p>
+                    <p class="text-lg text-gray-600">Skor Akhir Anda:</p>
+                    <p id="final-score" class="text-6xl font-black text-accent"></p>
+                    <p id="grade-message" class="text-xl font-semibold mt-4"></p>
+                </div>
+
+                <button id="restart-button" onclick="resetQuiz()"
+                        class="w-full bg-accent text-white quiz-button hover:bg-emerald-600">
+                    Coba Lagi
+                </button>
+            </div>
+        </main>
+        
+        <footer class="text-center text-xs text-gray-500 p-2 border-t mt-4">
+            Dibuat untuk Guru Bahasa Inggris Kelas X SMA
+        </footer>
+    </div>
+
+    <script>
+        // Global state variables
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let studentName = "";
+        let selectedAnswer = null;
+        
+        // --- Quiz Data: Questions about Tenses ---
+        const questions = [
+            {
+                question: "Which tense describes a habitual action or a general truth?",
+                options: ["Present Continuous", "Simple Past", "Simple Present", "Present Perfect"],
+                answer: "Simple Present"
+            },
+            {
+                question: "The correct sentence using Simple Past Tense is...",
+                options: ["She is cooking dinner now.", "They went to the beach yesterday.", "I have finished my homework.", "He will study tomorrow."],
+                answer: "They went to the beach yesterday."
+            },
+            {
+                question: "Fill in the blank: 'Look! The students _____ (play) football on the field.'",
+                options: ["play", "are playing", "played", "have played"],
+                answer: "are playing"
+            },
+            {
+                question: "Which sentence uses the Present Perfect Tense correctly?",
+                options: ["He watch TV last night.", "We are watching a movie.", "They have lived here for ten years.", "I go to school every day."],
+                answer: "They have lived here for ten years."
+            },
+            {
+                question: "I think I _____ (be) a famous architect one day. (Future Tense)",
+                options: ["am being", "was", "will be", "have been"],
+                answer: "will be"
+            }
+        ];
+
+        // --- DOM Elements ---
+        const startScreen = document.getElementById('start-screen');
+        const quizScreen = document.getElementById('quiz-screen');
+        const resultScreen = document.getElementById('result-screen');
+
+        const studentNameInput = document.getElementById('student-name');
+        const nameError = document.getElementById('name-error');
+        const studentDisplay = document.getElementById('student-display');
+        const scoreDisplay = document.getElementById('score-display');
+        const questionStatus = document.getElementById('question-status');
+        const questionText = document.getElementById('question-text');
+        const optionsContainer = document.getElementById('options-container');
+        const nextButton = document.getElementById('next-button');
+        const resultName = document.getElementById('result-name');
+        const finalScore = document.getElementById('final-score');
+        const gradeMessage = document.getElementById('grade-message');
+        const feedbackArea = document.getElementById('feedback-area');
+
+        // --- Functions ---
+
+        /**
+         * Initializes the quiz state and hides the start screen.
+         */
+        function startQuiz() {
+            studentName = studentNameInput.value.trim();
+            if (studentName === "") {
+                nameError.classList.remove('hidden');
+                return;
+            }
+
+            nameError.classList.add('hidden');
+            currentQuestionIndex = 0;
+            score = 0;
+            studentDisplay.textContent = `Siswa: ${studentName}`;
+
+            // Transition screens
+            startScreen.classList.add('hidden');
+            quizScreen.classList.remove('hidden');
+
+            loadQuestion();
+        }
+
+        /**
+         * Loads and displays the current question and options.
+         */
+        function loadQuestion() {
+            const q = questions[currentQuestionIndex];
+            
+            // Reset state for new question
+            selectedAnswer = null;
+            optionsContainer.innerHTML = '';
+            nextButton.disabled = true;
+            nextButton.classList.add('opacity-50', 'cursor-not-allowed');
+            nextButton.textContent = 'Selanjutnya';
+            
+            feedbackArea.classList.add('hidden');
+
+            // Update status bar
+            questionStatus.textContent = `Soal: ${currentQuestionIndex + 1} / ${questions.length}`;
+            scoreDisplay.textContent = `Skor: ${score}`;
+            questionText.textContent = q.question;
+
+            // Render options
+            q.options.forEach((option, index) => {
+                const optionDiv = document.createElement('div');
+                optionDiv.textContent = option;
+                optionDiv.className = 'option-item p-4 bg-white rounded-lg shadow-sm hover:shadow-md';
+                optionDiv.onclick = () => selectOption(optionDiv, option);
+                optionsContainer.appendChild(optionDiv);
+            });
+        }
+
+        /**
+         * Handles option selection by the user.
+         * @param {HTMLElement} element - The selected option element.
+         * @param {string} answer - The selected answer text.
+         */
+        function selectOption(element, answer) {
+            // Remove selection class from all options
+            document.querySelectorAll('.option-item').forEach(el => {
+                el.classList.remove('selected');
+            });
+
+            // Set current selection
+            element.classList.add('selected');
+            selectedAnswer = answer;
+
+            // Enable next button
+            nextButton.disabled = false;
+            nextButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+
+        /**
+         * Handles the 'Next' button click: checks the answer and moves to the next question or results.
+         */
+        function nextQuestion() {
+            if (selectedAnswer === null) return;
+
+            const isCorrect = checkAnswer(selectedAnswer);
+            
+            // Provide visual feedback (optional, but good for engagement)
+            showFeedback(isCorrect);
+            
+            // Delay moving to the next question to show the feedback
+            setTimeout(() => {
+                currentQuestionIndex++;
+
+                if (currentQuestionIndex < questions.length) {
+                    loadQuestion();
+                } else {
+                    showResults(); // Quiz finished
+                }
+            }, 800); 
+        }
+
+        /**
+         * Checks the selected answer against the correct answer and updates the score.
+         * @param {string} selected - The user's selected answer.
+         * @returns {boolean} True if correct, false otherwise.
+         */
+        function checkAnswer(selected) {
+            const correct = questions[currentQuestionIndex].answer;
+            const isCorrect = selected === correct;
+
+            if (isCorrect) {
+                score += 20; // 5 questions * 20 points = 100 max
+            }
+            return isCorrect;
+        }
+
+        /**
+         * Displays a temporary feedback message.
+         * @param {boolean} isCorrect - Whether the answer was correct.
+         */
+        function showFeedback(isCorrect) {
+            feedbackArea.classList.remove('hidden');
+            feedbackArea.classList.add('fade-in-down');
+            
+            // Disable all options and next button temporarily
+            document.querySelectorAll('.option-item').forEach(el => el.onclick = null);
+            nextButton.disabled = true;
+
+            if (isCorrect) {
+                feedbackArea.textContent = "✅ Jawaban BENAR!";
+                feedbackArea.className = 'text-center font-semibold text-lg p-2 rounded-lg bg-accent text-white fade-in-down';
+            } else {
+                const correctAns = questions[currentQuestionIndex].answer;
+                feedbackArea.textContent = `❌ Jawaban SALAH. Yang benar: '${correctAns}'`;
+                feedbackArea.className = 'text-center font-semibold text-lg p-2 rounded-lg bg-red-500 text-white fade-in-down';
+            }
+            scoreDisplay.textContent = `Skor: ${score}`;
+        }
+
+        /**
+         * Shows the final results screen.
+         */
+        function showResults() {
+            quizScreen.classList.add('hidden');
+            resultScreen.classList.remove('hidden');
+
+            const maxScore = questions.length * 20;
+            const percentage = (score / maxScore) * 100;
+
+            resultName.textContent = studentName;
+            finalScore.textContent = score;
+
+            let message = "";
+            let colorClass = "text-gray-700";
+
+            if (percentage === 100) {
+                message = "Luar Biasa! Anda adalah Ahli Tenses Sejati! 🌟";
+                colorClass = "text-green-600";
+            } else if (percentage >= 80) {
+                message = "Hebat! Pemahaman Tenses Anda sangat baik.";
+                colorClass = "text-blue-600";
+            } else if (percentage >= 60) {
+                message = "Cukup Baik! Sedikit lagi menuju skor sempurna. Terus berlatih!";
+                colorClass = "text-yellow-600";
+            } else {
+                message = "Perlu Lebih Banyak Latihan. Jangan menyerah, ayo pelajari Tenses lagi!";
+                colorClass = "text-red-600";
+            }
+
+            gradeMessage.textContent = message;
+            gradeMessage.className = `text-xl font-semibold mt-4 ${colorClass}`;
+        }
+
+        /**
+         * Resets the application state to the start screen.
+         */
+        function resetQuiz() {
+            currentQuestionIndex = 0;
+            score = 0;
+            studentNameInput.value = "";
+            
+            resultScreen.classList.add('hidden');
+            startScreen.classList.remove('hidden');
+        }
+
+        // Initialize by ensuring we start on the start screen
+        document.addEventListener('DOMContentLoaded', () => {
+            startScreen.classList.remove('hidden');
+            quizScreen.classList.add('hidden');
+            resultScreen.classList.add('hidden');
+        });
+    </script>
+
+</body>
+</html>
