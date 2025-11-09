@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Permainan Mencocokkan Pasangan</title>
+    <!-- Memuat Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Konfigurasi Tailwind untuk menggunakan warna dan font yang modern -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#4f46e5', // Indigo 600
+                        'secondary': '#facc15', // Amber 400
+                        'match-bg': '#10b981', // Emerald 500
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Menggunakan font Inter dari Google Fonts */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        
+        /* Card flip effect */
+        .card-inner {
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 0.75rem; /* rounded-xl */
+        }
+
+        .flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            font-size: 2.5rem; /* Ukuran emoji/ikon */
+        }
+
+        .card-back {
+            background-color: #f1f5f9; /* Slate 100 */
+            border: 3px solid #6366f1; /* Indigo 500 */
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        
+        .card-back:hover:not(.matched) {
+            background-color: #e2e8f0; /* Slate 200 */
+            border-color: #4f46e5; /* Indigo 600 */
+        }
+
+        .card-front {
+            background-color: white;
+            transform: rotateY(180deg);
+        }
+
+        .matched .card-inner {
+            /* Matched cards should stay flipped and change color */
+            pointer-events: none;
+            box-shadow: 0 8px 10px rgba(16, 185, 129, 0.4); /* Shadow hijau */
+        }
+
+        .matched .card-front {
+            background-color: #a7f3d0; /* Emerald 200 */
+            color: #10b981; /* Emerald 500 */
+        }
+        
+        .card-container {
+            aspect-ratio: 1 / 1; /* Membuat kartu selalu berbentuk persegi */
+            perspective: 1000px; /* Jarak untuk 3D */
+        }
+
+        @media (min-width: 640px) {
+            .card-face {
+                font-size: 3.5rem;
+            }
+        }
+
+        /* Loading Overlay Styling */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            backdrop-filter: blur(5px);
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #facc15;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-4 flex items-center justify-center font-sans">
+
+    <div id="game-container" class="w-full max-w-4xl bg-white p-6 md:p-10 rounded-3xl shadow-2xl">
+        <h1 class="text-4xl md:text-5xl font-extrabold text-primary mb-2 text-center">
+            Permainan Mencocokkan
+        </h1>
+        <p class="text-gray-500 text-center mb-6 md:mb-8 text-lg">Temukan semua pasangan ikon!</p>
+
+        <!-- Status & Kontrol Area -->
+        <div class="flex flex-col sm:flex-row justify-between items-center mb-6 p-4 bg-primary/10 rounded-xl border border-primary/20">
+            <div class="text-center sm:text-left mb-3 sm:mb-0">
+                <p class="text-lg font-semibold text-gray-700">Percobaan: <span id="attempts" class="text-primary font-bold">0</span></p>
+                <p class="text-lg font-semibold text-gray-700">Pasangan Cocok: <span id="matches" class="text-match-bg font-bold">0</span> / <span id="total-pairs">8</span></p>
+            </div>
+            
+            <button id="reset-button" 
+                    class="bg-secondary hover:bg-yellow-500 text-gray-900 font-bold py-3 px-6 rounded-full shadow-lg transition duration-200 transform hover:scale-105 active:scale-95 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-2"><path d="M21.5 2v6h-6"/><path d="M2.5 22v-6h6"/><path d="M2 11.5a10 10 0 0 1 18.5-5a10 10 0 0 1-18.5 5"/></svg>
+                Mulai Ulang
+            </button>
+        </div>
+
+        <!-- Papan Permainan -->
+        <div id="game-board" class="grid grid-cols-4 gap-3 md:gap-5">
+            <!-- Kartu akan di-render di sini oleh JavaScript -->
+        </div>
+
+        <!-- Overlay Pesan Kemenangan/Penyelesaian -->
+        <div id="message-overlay" class="fixed inset-0 bg-primary/95 backdrop-blur-sm z-40 hidden flex items-center justify-center p-4">
+            <div id="message-box" class="bg-white p-8 md:p-12 rounded-2xl shadow-2xl text-center transform scale-90 transition-transform duration-500">
+                <h2 class="text-5xl font-extrabold text-match-bg mb-4">SELAMAT!</h2>
+                <p class="text-xl text-gray-700 mb-6">Anda telah menyelesaikan permainan!</p>
+                <p class="text-2xl font-semibold text-primary mb-8">Total Percobaan: <span id="final-attempts">0</span></p>
+                <button id="restart-button-modal" 
+                        class="bg-primary hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-full shadow-lg transition duration-200 transform hover:scale-105 active:scale-95">
+                    Main Lagi
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="text-center">
+            <div class="spinner mx-auto mb-3"></div>
+            <p class="text-xl">Memuat Permainan...</p>
+        </div>
+    </div>
+
+    <script>
+        // Array pasangan ikon untuk permainan. Setiap item akan digandakan.
+        const cardIcons = ['🎉', '🚀', '⭐', '🎈', '🎁', '💡', '🏆', '🔥'];
+
+        // Variabel Status Permainan
+        let cards = [];
+        let flippedCards = [];
+        let matchesFound = 0;
+        let attempts = 0;
+        let lockBoard = false; // Kunci papan saat 2 kartu terbuka
+
+        // Elemen DOM
+        const gameBoard = document.getElementById('game-board');
+        const attemptsDisplay = document.getElementById('attempts');
+        const matchesDisplay = document.getElementById('matches');
+        const totalPairsDisplay = document.getElementById('total-pairs');
+        const resetButton = document.getElementById('reset-button');
+        const messageOverlay = document.getElementById('message-overlay');
+        const finalAttemptsDisplay = document.getElementById('final-attempts');
+        const restartButtonModal = document.getElementById('restart-button-modal');
+        const loadingOverlay = document.getElementById('loading-overlay');
+
+        /**
+         * Mengacak array menggunakan algoritma Fisher-Yates.
+         * @param {Array} array Array yang akan diacak.
+         */
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        /**
+         * Membuat dan menampilkan kartu di papan permainan.
+         */
+        function renderCards() {
+            // Hapus kartu lama
+            gameBoard.innerHTML = '';
+            
+            cards.forEach(card => {
+                const cardContainer = document.createElement('div');
+                cardContainer.classList.add('card-container');
+                
+                const cardOuter = document.createElement('div');
+                cardOuter.classList.add('card-outer', 'w-full', 'h-full');
+                cardOuter.dataset.id = card.id;
+
+                const cardInner = document.createElement('div');
+                cardInner.classList.add('card-inner');
+
+                const cardBack = document.createElement('div');
+                cardBack.classList.add('card-face', 'card-back', 'p-2', 'text-xl', 'font-bold', 'text-primary');
+                cardBack.innerHTML = 'Kartu'; // Teks di bagian belakang
+                
+                const cardFront = document.createElement('div');
+                cardFront.classList.add('card-face', 'card-front');
+                cardFront.textContent = card.icon;
+
+                cardInner.appendChild(cardBack);
+                cardInner.appendChild(cardFront);
+                cardOuter.appendChild(cardInner);
+                cardContainer.appendChild(cardOuter);
+
+                cardContainer.addEventListener('click', () => handleCardClick(cardOuter));
+                gameBoard.appendChild(cardContainer);
+            });
+        }
+
+        /**
+         * Memulai atau mereset permainan.
+         */
+        function initGame() {
+            loadingOverlay.classList.remove('hidden');
+            
+            // 1. Siapkan Kartu (Gandakan dan Beri ID Unik)
+            const fullDeck = [...cardIcons, ...cardIcons].map((icon, index) => ({
+                id: index,
+                icon: icon,
+                isFlipped: false,
+                isMatched: false
+            }));
+
+            // 2. Acak Kartu
+            cards = shuffle(fullDeck);
+
+            // 3. Reset Status Permainan
+            flippedCards = [];
+            matchesFound = 0;
+            attempts = 0;
+            lockBoard = false;
+            
+            // 4. Update UI
+            updateGameStatus();
+            totalPairsDisplay.textContent = cardIcons.length;
+            messageOverlay.classList.add('hidden');
+            
+            // 5. Render Kartu
+            renderCards();
+
+            // Sembunyikan loading setelah kartu di-render
+            setTimeout(() => {
+                loadingOverlay.classList.add('hidden');
+                // Pastikan semua kartu dalam keadaan tertutup (tidak ada class 'flipped')
+                document.querySelectorAll('.card-outer').forEach(card => card.classList.remove('flipped', 'matched'));
+            }, 500);
+        }
+
+        /**
+         * Memperbarui tampilan jumlah percobaan dan pasangan yang cocok.
+         */
+        function updateGameStatus() {
+            attemptsDisplay.textContent = attempts;
+            matchesDisplay.textContent = matchesFound;
+        }
+
+        /**
+         * Menangani klik pada kartu.
+         * @param {HTMLElement} cardElement Elemen kartu yang diklik.
+         */
+        function handleCardClick(cardElement) {
+            // Abaikan klik jika papan terkunci, kartu sudah cocok, atau kartu sudah terbuka
+            if (lockBoard || cardElement.classList.contains('matched') || cardElement.classList.contains('flipped')) {
+                return;
+            }
+
+            // Batasi hanya 2 kartu yang boleh terbuka
+            if (flippedCards.length >= 2) {
+                return;
+            }
+
+            // Balik kartu
+            cardElement.classList.add('flipped');
+            flippedCards.push(cardElement);
+
+            if (flippedCards.length === 2) {
+                attempts++;
+                updateGameStatus();
+                checkForMatch();
+            }
+        }
+
+        /**
+         * Memeriksa apakah dua kartu yang terbuka cocok.
+         */
+        function checkForMatch() {
+            const [card1, card2] = flippedCards;
+            
+            // Ambil ikon dari elemen depan kartu
+            const icon1 = card1.querySelector('.card-front').textContent;
+            const icon2 = card2.querySelector('.card-front').textContent;
+
+            const isMatch = icon1 === icon2;
+
+            // Kunci papan selama proses pemeriksaan
+            lockBoard = true;
+
+            if (isMatch) {
+                // Pasangan Cocok
+                disableCards(card1, card2);
+            } else {
+                // Tidak Cocok
+                unflipCards(card1, card2);
+            }
+        }
+
+        /**
+         * Menandai kartu sebagai cocok dan menonaktifkan klik.
+         * @param {HTMLElement} card1 Kartu pertama.
+         * @param {HTMLElement} card2 Kartu kedua.
+         */
+        function disableCards(card1, card2) {
+            matchesFound++;
+            updateGameStatus();
+
+            // Tambahkan kelas 'matched'
+            card1.classList.add('matched');
+            card2.classList.add('matched');
+
+            // Hapus kelas 'flipped' untuk mengontrol animasi yang lebih bersih, tapi biarkan inner tetap terbalik
+            card1.classList.remove('flipped');
+            card2.classList.remove('flipped');
+
+            // Reset status papan setelah penundaan singkat untuk visual
+            setTimeout(() => {
+                resetBoard();
+                checkWinCondition();
+            }, 300);
+        }
+
+        /**
+         * Membalik kembali kartu karena tidak cocok.
+         * @param {HTMLElement} card1 Kartu pertama.
+         * @param {HTMLElement} card2 Kartu kedua.
+         */
+        function unflipCards(card1, card2) {
+            setTimeout(() => {
+                // Balik kembali kartu
+                card1.classList.remove('flipped');
+                card2.classList.remove('flipped');
+                resetBoard();
+            }, 1200); // Tunda 1.2 detik sebelum membalik kembali
+        }
+
+        /**
+         * Mereset variabel `flippedCards` dan `lockBoard`.
+         */
+        function resetBoard() {
+            [flippedCards, lockBoard] = [[], false];
+        }
+
+        /**
+         * Memeriksa apakah semua pasangan telah ditemukan.
+         */
+        function checkWinCondition() {
+            if (matchesFound === cardIcons.length) {
+                showWinMessage();
+            }
+        }
+
+        /**
+         * Menampilkan pesan kemenangan/penyelesaian.
+         */
+        function showWinMessage() {
+            finalAttemptsDisplay.textContent = attempts;
+            messageOverlay.classList.remove('hidden');
+            // Tambahkan animasi masuk
+            document.getElementById('message-box').classList.remove('scale-90');
+            document.getElementById('message-box').classList.add('scale-100');
+        }
+
+        // --- Event Listeners ---
+        resetButton.addEventListener('click', initGame);
+        restartButtonModal.addEventListener('click', () => {
+            document.getElementById('message-box').classList.remove('scale-100');
+            document.getElementById('message-box').classList.add('scale-90');
+            initGame();
+        });
+
+        // Inisialisasi permainan saat halaman dimuat
+        window.onload = initGame;
+
+    </script>
+</body>
+</html>
