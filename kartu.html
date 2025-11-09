@@ -49,6 +49,7 @@
             backface-visibility: hidden;
             border-radius: 0.75rem;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             cursor: pointer;
@@ -66,6 +67,14 @@
             background-color: #e2e8f0; /* Slate 200 */
             border-color: #4f46e5; /* Indigo 600 */
         }
+        
+        /* Styling untuk kartu yang kehabisan kesempatan klik */
+        .card-exhausted .card-back {
+            background-color: #fee2e2; /* Red 100 */
+            border-color: #ef4444; /* Red 500 */
+            cursor: not-allowed;
+            color: #ef4444;
+        }
 
         .card-front {
             background-color: white;
@@ -73,7 +82,6 @@
         }
 
         .matched .card-inner {
-            /* Matched cards should stay flipped and change color */
             pointer-events: none;
             box-shadow: 0 8px 10px rgba(16, 185, 129, 0.4); /* Shadow hijau */
         }
@@ -133,9 +141,13 @@
 
         <!-- Status & Kontrol Area -->
         <div class="flex flex-col sm:flex-row justify-between items-center mb-6 p-4 bg-primary/10 rounded-xl border border-primary/20">
-            <div class="text-center sm:text-left mb-3 sm:mb-0">
-                <p class="text-lg font-semibold text-gray-700">Percobaan: <span id="attempts" class="text-primary font-bold">0</span></p>
-                <p class="text-lg font-semibold text-gray-700">Pasangan Cocok: <span id="matches" class="text-match-bg font-bold">0</span> / <span id="total-pairs">8</span></p>
+            <div class="text-center sm:text-left mb-3 sm:mb-0 space-y-1">
+                <!-- NEW: Per-Card Max Flips Display -->
+                <p class="text-lg font-semibold text-gray-700">Maks. Klik per Kartu: <span id="max-flips-card" class="text-red-500 font-bold">3</span></p> 
+                <!-- Score Display -->
+                <p class="text-lg font-semibold text-gray-700">Pasangan Cocok (Skor): <span id="matches" class="text-match-bg font-bold">0</span> / <span id="total-pairs">8</span></p>
+                <!-- Total Flips (Game wide) -->
+                <p class="text-sm text-gray-500 italic">Total Pasangan Dibuka: <span id="attempts" class="text-primary font-bold">0</span></p>
             </div>
             
             <button id="reset-button" 
@@ -153,9 +165,9 @@
         <!-- Overlay Pesan Kemenangan/Penyelesaian -->
         <div id="message-overlay" class="fixed inset-0 bg-primary/95 backdrop-blur-sm z-40 hidden flex items-center justify-center p-4">
             <div id="message-box" class="bg-white p-8 md:p-12 rounded-2xl shadow-2xl text-center transform scale-90 transition-transform duration-500">
-                <h2 class="text-5xl font-extrabold text-match-bg mb-4">SELAMAT!</h2>
-                <p class="text-xl text-gray-700 mb-6">Anda telah menyelesaikan permainan!</p>
-                <p class="text-2xl font-semibold text-primary mb-8">Total Percobaan: <span id="final-attempts">0</span></p>
+                <h2 id="message-title" class="text-5xl font-extrabold mb-4 text-match-bg">SELAMAT, ANDA MENANG!</h2>
+                <p id="message-body" class="text-xl text-gray-700 mb-6">Anda menemukan semua pasangan!</p>
+                <p class="text-2xl font-semibold text-primary mb-8">Pasangan Cocok (Skor Akhir): <span id="final-score">0</span></p>
                 <button id="restart-button-modal" 
                         class="bg-primary hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-full shadow-lg transition duration-200 transform hover:scale-105 active:scale-95">
                     Main Lagi
@@ -177,11 +189,15 @@
         // Array pasangan ikon untuk permainan. Setiap item akan digandakan.
         const cardIcons = ['🎉', '🚀', '⭐', '🎈', '🎁', '💡', '🏆', '🔥'];
 
+        // --- BATASAN BARU ---
+        const MAX_FLIPS_PER_CARD = 3; // Batas maksimal klik per kartu individual
+
         // Variabel Status Permainan
         let cards = [];
+        let cardFlipCounts = {}; // Map untuk melacak hitungan klik per kartu (Key: card ID, Value: count)
         let flippedCards = [];
-        let matchesFound = 0;
-        let attempts = 0;
+        let matchesFound = 0; // Ini adalah skor
+        let attempts = 0; // Total pasangan kartu yang dibuka
         let lockBoard = false; // Kunci papan saat 2 kartu terbuka
 
         // Elemen DOM
@@ -189,11 +205,16 @@
         const attemptsDisplay = document.getElementById('attempts');
         const matchesDisplay = document.getElementById('matches');
         const totalPairsDisplay = document.getElementById('total-pairs');
+        const maxFlipsCardDisplay = document.getElementById('max-flips-card');
         const resetButton = document.getElementById('reset-button');
         const messageOverlay = document.getElementById('message-overlay');
-        const finalAttemptsDisplay = document.getElementById('final-attempts');
+        const messageBox = document.getElementById('message-box');
+        const finalScoreDisplay = document.getElementById('final-score');
         const restartButtonModal = document.getElementById('restart-button-modal');
         const loadingOverlay = document.getElementById('loading-overlay');
+        
+        // Atur tampilan batas klik
+        maxFlipsCardDisplay.textContent = MAX_FLIPS_PER_CARD;
 
         /**
          * Mengacak array menggunakan algoritma Fisher-Yates.
@@ -208,10 +229,32 @@
         }
 
         /**
+         * Memperbarui tampilan hitungan klik pada bagian belakang kartu.
+         * @param {HTMLElement} cardElement Elemen kartu luar.
+         * @param {number} count Jumlah klik saat ini.
+         */
+        function updateCardBack(cardElement, count) {
+            const cardBack = cardElement.querySelector('.card-back');
+            const remaining = MAX_FLIPS_PER_CARD - count;
+            
+            // Hapus kelas exhausted jika ada
+            cardElement.classList.remove('card-exhausted'); 
+
+            if (remaining > 0) {
+                // Tampilkan sisa klik
+                cardBack.innerHTML = `<span class="text-sm font-light text-gray-600">Sisa Klik:</span><br><span class="text-2xl text-secondary font-extrabold">${remaining}</span>`;
+            } else {
+                // Tampilkan notifikasi habis dan kunci kartu secara visual
+                cardBack.innerHTML = 'HABIS';
+                cardElement.classList.add('card-exhausted');
+            }
+        }
+
+
+        /**
          * Membuat dan menampilkan kartu di papan permainan.
          */
         function renderCards() {
-            // Hapus kartu lama
             gameBoard.innerHTML = '';
             
             cards.forEach(card => {
@@ -227,10 +270,9 @@
 
                 const cardBack = document.createElement('div');
                 cardBack.classList.add('card-face', 'card-back', 'p-2', 'text-xl', 'font-bold', 'text-primary');
-                cardBack.innerHTML = 'Kartu'; // Teks di bagian belakang
                 
                 const cardFront = document.createElement('div');
-                cardFront.classList.add('card-face', 'card-front');
+                cardFront.classList.add('card-face', 'card-front', 'text-4xl'); // Atur ukuran ikon di sini
                 cardFront.textContent = card.icon;
 
                 cardInner.appendChild(cardBack);
@@ -240,6 +282,9 @@
 
                 cardContainer.addEventListener('click', () => handleCardClick(cardOuter));
                 gameBoard.appendChild(cardContainer);
+                
+                // Inisialisasi tampilan hitungan klik awal
+                updateCardBack(cardOuter, cardFlipCounts[card.id] || 0);
             });
         }
 
@@ -252,15 +297,18 @@
             // 1. Siapkan Kartu (Gandakan dan Beri ID Unik)
             const fullDeck = [...cardIcons, ...cardIcons].map((icon, index) => ({
                 id: index,
-                icon: icon,
-                isFlipped: false,
-                isMatched: false
+                icon: icon
             }));
 
             // 2. Acak Kartu
             cards = shuffle(fullDeck);
 
             // 3. Reset Status Permainan
+            cardFlipCounts = {};
+            cards.forEach(card => {
+                cardFlipCounts[card.id] = 0; // Inisialisasi hitungan klik per kartu menjadi 0
+            });
+            
             flippedCards = [];
             matchesFound = 0;
             attempts = 0;
@@ -270,6 +318,8 @@
             updateGameStatus();
             totalPairsDisplay.textContent = cardIcons.length;
             messageOverlay.classList.add('hidden');
+            messageBox.classList.remove('scale-100'); 
+            messageBox.classList.add('scale-90');
             
             // 5. Render Kartu
             renderCards();
@@ -277,13 +327,11 @@
             // Sembunyikan loading setelah kartu di-render
             setTimeout(() => {
                 loadingOverlay.classList.add('hidden');
-                // Pastikan semua kartu dalam keadaan tertutup (tidak ada class 'flipped')
-                document.querySelectorAll('.card-outer').forEach(card => card.classList.remove('flipped', 'matched'));
             }, 500);
         }
 
         /**
-         * Memperbarui tampilan jumlah percobaan dan pasangan yang cocok.
+         * Memperbarui tampilan jumlah total klik dan pasangan yang cocok.
          */
         function updateGameStatus() {
             attemptsDisplay.textContent = attempts;
@@ -295,6 +343,14 @@
          * @param {HTMLElement} cardElement Elemen kartu yang diklik.
          */
         function handleCardClick(cardElement) {
+            const cardId = parseInt(cardElement.dataset.id);
+            
+            // KUNCI 1: Cek batas klik per kartu
+            if (cardFlipCounts[cardId] >= MAX_FLIPS_PER_CARD) {
+                // Kartu ini sudah kehabisan kesempatan klik
+                return; 
+            }
+
             // Abaikan klik jika papan terkunci, kartu sudah cocok, atau kartu sudah terbuka
             if (lockBoard || cardElement.classList.contains('matched') || cardElement.classList.contains('flipped')) {
                 return;
@@ -304,6 +360,10 @@
             if (flippedCards.length >= 2) {
                 return;
             }
+
+            // === LOGIKA KLIK BARU ===
+            cardFlipCounts[cardId]++; // Tambah hitungan klik kartu
+            updateCardBack(cardElement, cardFlipCounts[cardId]); // Perbarui tampilan sisa klik
 
             // Balik kartu
             cardElement.classList.add('flipped');
@@ -349,7 +409,7 @@
             matchesFound++;
             updateGameStatus();
 
-            // Tambahkan kelas 'matched'
+            // Tambahkan kelas 'matched' (menonaktifkan interaksi lebih lanjut)
             card1.classList.add('matched');
             card2.classList.add('matched');
 
@@ -386,32 +446,31 @@
         }
 
         /**
-         * Memeriksa apakah semua pasangan telah ditemukan.
+         * Memeriksa apakah permainan selesai karena semua pasangan ditemukan.
          */
         function checkWinCondition() {
             if (matchesFound === cardIcons.length) {
-                showWinMessage();
+                showGameEndMessage();
             }
         }
 
         /**
-         * Menampilkan pesan kemenangan/penyelesaian.
+         * Menampilkan pesan akhir permainan.
          */
-        function showWinMessage() {
-            finalAttemptsDisplay.textContent = attempts;
+        function showGameEndMessage() {
+            lockBoard = true; 
+            
+            finalScoreDisplay.textContent = matchesFound;
+            
             messageOverlay.classList.remove('hidden');
-            // Tambahkan animasi masuk
-            document.getElementById('message-box').classList.remove('scale-90');
-            document.getElementById('message-box').classList.add('scale-100');
+            // Animasi masuk
+            messageBox.classList.remove('scale-90');
+            messageBox.classList.add('scale-100');
         }
 
         // --- Event Listeners ---
         resetButton.addEventListener('click', initGame);
-        restartButtonModal.addEventListener('click', () => {
-            document.getElementById('message-box').classList.remove('scale-100');
-            document.getElementById('message-box').classList.add('scale-90');
-            initGame();
-        });
+        restartButtonModal.addEventListener('click', initGame);
 
         // Inisialisasi permainan saat halaman dimuat
         window.onload = initGame;
